@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>friendchat</title>
+<link rel="stylesheet" href="style.css">
+
+<!--
+  Boot guard. Both screens below start hidden and are revealed by app.js, so
+  anything that stops app.js running would otherwise leave a blank white page
+  with no explanation. This is a plain classic script on purpose: it still runs
+  when the module script is missing, blocked or served as the wrong MIME type,
+  which are exactly the cases it needs to report.
+-->
+<script>
+(function () {
+  function fail(reason, detail) {
+    if (window.__booted) return;
+    var box = document.getElementById('boot');
+    if (!box) return;
+    document.getElementById('boot-wait').hidden = true;
+    document.getElementById('boot-error').hidden = false;
+    document.getElementById('boot-reason').textContent = reason;
+    if (detail) document.getElementById('boot-detail').textContent = detail;
+  }
+  window.__bootFail = fail;
+
+  // A <script> or <link> that 404s fires an error event on the element itself.
+  window.addEventListener('error', function (e) {
+    var node = e.target;
+    if (!node || !node.tagName) return;
+    if (node.tagName === 'SCRIPT') fail('The app script did not load.', node.src || '');
+    if (node.tagName === 'LINK') fail('The stylesheet did not load.', node.href || '');
+  }, true);
+
+  /*
+   * If app.js was found but never ran, ask the server what it is actually
+   * sending. "Did not run" on its own is not actionable; the status line and
+   * the Content-Type header say exactly which of the usual causes it is.
+   */
+  setTimeout(function () {
+    if (window.__booted) return;
+
+    fetch('app.js', { cache: 'no-store' }).then(function (res) {
+      var type = res.headers.get('content-type') || '(none sent)';
+      return res.text().then(function (body) {
+        var isHtml = /^\s*(<!doctype|<html)/i.test(body);
+        var isJsType = /javascript|ecmascript/i.test(type);
+
+        if (!res.ok) {
+          fail('The server could not find app.js.',
+               'It answered ' + res.status + ' ' + res.statusText + '. Upload app.js into the same folder as index.html.');
+        } else if (isHtml) {
+          fail('The server sent a web page where app.js should be.',
+               'Status ' + res.status + ', Content-Type ' + type + '. That is usually the host’s error page, meaning app.js is not actually in this folder.');
+        } else if (!isJsType) {
+          fail('Your host is sending app.js with the wrong type.',
+               'It sent Content-Type: ' + type + '. A module script must be served as JavaScript, so the browser blocks it. '
+             + 'Fix: upload a .htaccess file next to index.html containing  AddType text/javascript .js');
+        } else {
+          fail('app.js loaded but stopped on an error.',
+               'It was served correctly as ' + type + ', so the fault is in the script itself. Open the browser console (F12) for the real message.');
+        }
+      });
+    }).catch(function (err) {
+      fail('The app script did not run.',
+           'app.js could not even be fetched (' + err + '). Check that it sits next to index.html.');
+    });
+  }, 5000);
+})();
+</script>
+</head>
+<body>
+
+<!-- Shown until app.js takes over; turns into a diagnosis if it never does. -->
+<div id="boot" class="boot">
+  <div id="boot-wait">
+    <div class="boot-dot"></div>
+    <p>Loading friendchat&hellip;</p>
+  </div>
+
+  <div id="boot-error" class="boot-error" hidden>
+    <h1>friendchat could not start</h1>
+    <p id="boot-reason"></p>
+    <p id="boot-detail" class="boot-detail"></p>
+    <p class="boot-help">Usually one of these:</p>
+    <ul class="boot-help">
+      <li><code>app.js</code> and <code>style.css</code> must sit in the
+          <strong>same folder</strong> as <code>index.html</code>.</li>
+      <li>File names are <strong>case-sensitive</strong> on a web server
+          &mdash; <code>App.js</code> is not <code>app.js</code>.</li>
+      <li>Upload in <strong>binary</strong> mode, not ASCII/text.</li>
+      <li>This app needs a <strong>Node</strong> server running
+          <code>server.mjs</code>. Uploading only these files to a PHP host
+          will not work on its own.</li>
+    </ul>
+  </div>
+</div>
+
+<noscript>
+  <div class="boot">
+    <div class="boot-error">
+      <h1>friendchat needs JavaScript</h1>
+      <p>Please turn JavaScript on and reload.</p>
+    </div>
+  </div>
+</noscript>
+
+<!-- ============================ sign in / sign up ======================= -->
+<section id="gate" class="gate" hidden>
+  <div class="gate-card">
+    <h1 class="brand">friend<span>chat</span></h1>
+    <p class="gate-sub">Texting for you and your friends.</p>
+
+    <div class="tabs" role="tablist">
+      <button class="tab is-on" data-mode="login" role="tab">Log in</button>
+      <button class="tab" data-mode="signup" role="tab">Sign up</button>
+    </div>
+
+    <form id="gate-form" autocomplete="on">
+      <label>
+        Username
+        <input name="username" type="text" autocomplete="username" required
+               minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}"
+               placeholder="letters, numbers, underscores">
+      </label>
+      <label>
+        Password
+        <input name="password" type="password" autocomplete="current-password"
+               required minlength="6" placeholder="at least 6 characters">
+      </label>
+      <p id="gate-hint" class="hint" hidden>
+        Your password is only ever typed by you, to log in.
+        To let a friend text you, give them your <strong>friend code</strong> instead
+        &mdash; you will see it as soon as you sign up.
+      </p>
+      <p id="gate-error" class="error" role="alert" hidden></p>
+      <button id="gate-submit" class="primary" type="submit">Log in</button>
+    </form>
+  </div>
+</section>
+
+<!-- ================================ the app ============================= -->
+<div id="app" class="app" hidden>
+
+  <header class="topbar">
+    <button id="menu" class="icon-btn" aria-label="Show conversations">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+    </button>
+    <h1 class="brand small">friend<span>chat</span></h1>
+
+    <div class="search">
+      <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>
+      </svg>
+      <input id="search" type="search" placeholder="Search chats" autocomplete="off" aria-label="Search chats">
+      <button id="search-clear" class="icon-btn tiny" aria-label="Clear search" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <div class="topbar-right">
+      <button id="my-code" class="code-chip" title="Click to copy your friend code"></button>
+      <button id="open-settings" class="icon-btn" aria-label="Settings" title="Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="3.2"/>
+          <path d="M12 2.6v3M12 18.4v3M21.4 12h-3M5.6 12h-3M18.6 5.4l-2.1 2.1M7.5 16.5l-2.1 2.1M18.6 18.6l-2.1-2.1M7.5 7.5L5.4 5.4"/>
+        </svg>
+      </button>
+      <button id="avatar-me" class="avatar me" aria-label="Your account"></button>
+    </div>
+  </header>
+
+  <main class="shell">
+    <!-- left rail: compose + filters -->
+    <nav class="rail" aria-label="Main">
+      <button id="compose" class="compose">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/></svg>
+        <span>Compose</span>
+      </button>
+
+      <!--
+        Not a filter: this opens one particular conversation. It sits apart
+        from the tablist below for that reason, and because asking the bot
+        something is a different kind of act from narrowing the list.
+      -->
+      <ul class="nav">
+        <li><button id="ask-bot" class="nav-item bot-item">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M9.3 9.4a2.8 2.8 0 015.5.9c0 1.8-2.8 2.1-2.8 3.8"/>
+            <path d="M12 17.3v.01"/>
+          </svg>
+          <span>Question Bot</span>
+        </button></li>
+      </ul>
+
+      <ul class="nav" role="tablist">
+        <li><button class="nav-item is-on" data-filter="all" role="tab">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 11-3-6.2L21 4v5h-5"/></svg>
+          <span>All chats</span><span class="nav-count" data-count="all"></span>
+        </button></li>
+        <li><button class="nav-item" data-filter="unread" role="tab">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/></svg>
+          <span>Unread</span><span class="nav-count" data-count="unread"></span>
+        </button></li>
+        <li><button class="nav-item" data-filter="groups" role="tab">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3 2.7-5 6-5s6 2 6 5"/>
+            <path d="M16 6.2A3.2 3.2 0 1117 13M17.5 19c0-2.2-.9-3.9-2.4-4.6"/>
+          </svg>
+          <span>Groups</span><span class="nav-count" data-count="groups"></span>
+        </button></li>
+      </ul>
+
+      <ul class="nav nav-foot">
+        <li><button id="logout" class="nav-item">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h4a2 2 0 012 2v12a2 2 0 01-2 2h-4M10 16l-4-4 4-4M6 12h10"/></svg>
+          <span>Log out</span>
+        </button></li>
+      </ul>
+
+      <p class="rail-foot">
+        Your code<br>
+        <code id="rail-code"></code>
+      </p>
+    </nav>
+
+    <!-- conversation list -->
+    <section class="list-pane" aria-label="Conversations">
+      <div id="conv-list" class="conv-list"></div>
+      <p id="list-empty" class="list-empty" hidden></p>
+    </section>
+
+    <!-- reading pane -->
+    <section class="read-pane">
+      <div id="empty" class="empty">
+        <svg class="empty-art" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M21 11.5a8.4 8.4 0 01-9 8.4L7 21l1.1-3.3A8.4 8.4 0 1121 11.5z"/>
+        </svg>
+        <p class="empty-big">Nothing open</p>
+        <p>Pick a conversation, or hit <strong>Compose</strong> to start one.</p>
+      </div>
+
+      <div id="thread" class="thread" hidden>
+        <div class="thread-head">
+          <button id="back" class="icon-btn back" aria-label="Back to conversations">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+          </button>
+          <div id="thread-avatar" class="avatar big"></div>
+          <div class="thread-who">
+            <h2 id="thread-title"></h2>
+            <p id="thread-sub" class="thread-sub"></p>
+          </div>
+          <div class="thread-actions">
+            <button id="group-add"    class="icon-btn" title="Add someone" aria-label="Add someone" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="8" r="3.2"/><path d="M4 19c0-3 2.7-5 6-5 1 0 2 .2 2.8.6M18 13v6M15 16h6"/></svg>
+            </button>
+            <button id="group-rename" class="icon-btn" title="Rename group" aria-label="Rename group" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/></svg>
+            </button>
+            <button id="group-leave"  class="icon-btn" title="Leave group" aria-label="Leave group" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h4a2 2 0 012 2v12a2 2 0 01-2 2h-4M10 16l-4-4 4-4M6 12h10"/></svg>
+            </button>
+            <button id="block-user"   class="icon-btn danger" title="Block" aria-label="Block this person" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div id="messages" class="messages" aria-live="polite"></div>
+
+        <!-- Shown between picking a picture and sending it, so nobody has to
+             guess whether the right file was attached. -->
+        <div id="attach-preview" class="attach-preview" hidden>
+          <img id="attach-thumb" alt="Picture waiting to be sent">
+          <div class="attach-meta">
+            <strong id="attach-name"></strong>
+            <span id="attach-size"></span>
+          </div>
+          <button id="attach-drop" class="icon-btn tiny" type="button" aria-label="Remove this picture">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+
+        <form id="send-form" class="composer">
+          <input id="attach-input" type="file" accept="image/jpeg,image/png,image/gif,image/webp" hidden>
+          <button id="attach" class="icon-btn attach-btn" type="button"
+                  title="Send a picture" aria-label="Send a picture">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="4.5" width="18" height="15" rx="2.5"/>
+              <circle cx="8.6" cy="10" r="1.7"/>
+              <path d="M3.4 17.2L9 12l4 3.6 3-2.6 4.6 4.2"/>
+            </svg>
+          </button>
+          <textarea id="send-input" rows="1" maxlength="4000"
+                    placeholder="Write a message"></textarea>
+          <button class="send-btn" type="submit" aria-label="Send">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l16-8-6 8 6 8-16-8z"/></svg>
+          </button>
+        </form>
+        <p id="send-error" class="error small" role="alert" hidden></p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ============================== compose =============================== -->
+<div id="compose-modal" class="modal" hidden>
+  <div class="modal-card compose-card">
+    <header class="modal-head">
+      <h2>New message</h2>
+      <button id="close-compose" class="icon-btn" aria-label="Close">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </header>
+
+    <div class="modal-body compose-body">
+      <div class="field">
+        <label class="field-label" for="to-input">To</label>
+        <div id="chips" class="chips">
+          <input id="to-input" type="text" placeholder="Friend code, e.g. MAYA-7390"
+                 maxlength="9" autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+      <p class="field-note">
+        Add a second person and this becomes a group chat.
+      </p>
+
+      <div class="field" id="title-field" hidden>
+        <label class="field-label" for="group-title">Group name</label>
+        <input id="group-title" type="text" maxlength="60" placeholder="Optional">
+      </div>
+
+      <textarea id="compose-body" class="compose-text" rows="5" maxlength="4000"
+                placeholder="Write your message"></textarea>
+
+      <p id="compose-error" class="error small" role="alert" hidden></p>
+
+      <div class="compose-foot">
+        <button id="compose-send" class="primary" type="button" disabled>Send</button>
+        <span id="compose-hint" class="field-note"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== settings ============================== -->
+<div id="settings" class="modal" hidden>
+  <div class="modal-card">
+    <header class="modal-head">
+      <h2>Settings</h2>
+      <button id="close-settings" class="icon-btn" aria-label="Close">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </header>
+
+    <div class="modal-body">
+      <section class="setting">
+        <h3>Your friend code</h3>
+        <p class="note">Safe to share. This is what friends type in to reach you.</p>
+        <div class="code-row">
+          <code id="settings-code"></code>
+          <button id="regen-code" class="ghost small">Get a new code</button>
+        </div>
+        <p class="note">A new code does not break chats you already have.</p>
+      </section>
+
+      <section class="setting">
+        <h3>Group chats</h3>
+        <label class="check">
+          <input id="allow-groups" type="checkbox" checked>
+          <span>Let friends add me to group chats</span>
+        </label>
+        <p class="note">
+          When this is off, nobody can put you in a new group &mdash; they are told
+          you are not accepting group invites. Groups you are already in stay as they
+          are, and you can still start your own.
+        </p>
+      </section>
+
+      <section class="setting">
+        <h3>Change username</h3>
+        <form id="username-form" class="stack">
+          <input name="username" type="text" maxlength="20" required
+                 pattern="[A-Za-z0-9_]{3,20}" placeholder="New username">
+          <button class="primary small" type="submit">Save username</button>
+        </form>
+      </section>
+
+      <section class="setting">
+        <h3>Change password</h3>
+        <form id="password-form" class="stack">
+          <input name="current" type="password" required autocomplete="current-password"
+                 placeholder="Current password">
+          <input name="next" type="password" required minlength="6"
+                 autocomplete="new-password" placeholder="New password (6+ characters)">
+          <button class="primary small" type="submit">Save password</button>
+        </form>
+        <p class="note">Changing this logs you out everywhere else.</p>
+      </section>
+
+      <section class="setting">
+        <h3>Blocked people</h3>
+        <ul id="block-list" class="block-list"></ul>
+      </section>
+
+      <p id="settings-msg" class="settings-msg" role="status" hidden></p>
+    </div>
+  </div>
+</div>
+
+<!-- =============================== picture viewer ======================= -->
+<div id="lightbox" class="lightbox" hidden>
+  <button id="close-lightbox" class="icon-btn" aria-label="Close picture">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+  <img id="lightbox-img" alt="">
+</div>
+
+<script src="app.js" type="module"></script>
+</body>
+</html>

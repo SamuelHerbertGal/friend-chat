@@ -1,0 +1,34 @@
+# friendchat — Apache/LiteSpeed settings for a cPanel-style host.
+#
+# Upload this file into the SAME folder as index.html. It is a hidden file:
+# in cPanel's File Manager turn on "Show Hidden Files (dotfiles)" first, or
+# send it over FTP.
+
+# --- the fix for "Your host is sending app.js with the wrong type" ----------
+# app.js is loaded as a module script, and browsers refuse to execute a module
+# unless the server calls it JavaScript. Some shared hosts send text/plain or
+# application/octet-stream, which blocks it and leaves the app unable to start.
+<IfModule mod_mime.c>
+  AddType text/javascript .js
+  AddType text/css        .css
+  AddType image/svg+xml   .svg
+</IfModule>
+
+# Serve these as UTF-8; the source files contain typographic punctuation.
+AddDefaultCharset UTF-8
+
+# --- make sure index.html is the home page ---------------------------------
+DirectoryIndex index.html
+
+# --- never serve the database or the server source over the web ------------
+# These should not be uploaded at all, but refuse them if they ever are.
+<FilesMatch "\.(db|db-wal|db-shm|mjs|json|md)$">
+  Require all denied
+</FilesMatch>
+
+# --- send people to https, so session cookies are not readable in transit --
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTPS} off
+  RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>

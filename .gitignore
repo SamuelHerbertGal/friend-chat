@@ -1,0 +1,16 @@
+# The database holds real accounts and messages -- never commit it.
+chat.db
+chat.db-wal
+chat.db-shm
+*.db
+
+# Pictures people sent each other. User content, exactly like the database.
+uploads/
+test-uploads/
+
+# Where ANTHROPIC_API_KEY ends up if you keep it in a file rather than the
+# environment. Nothing loads this automatically -- it is listed so that a key
+# put here by hand can never be committed by accident.
+.env
+
+node_modules/

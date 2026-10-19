@@ -1,0 +1,1038 @@
+/*
+ * friendchat — a mail-client layout.
+ *
+ * Three columns, the way a mail app reads: a rail of actions, a list of
+ * conversations, and the one you are reading. Below 900px the reading pane
+ * takes over and the list slides away behind the menu button.
+ */
+
+:root {
+  --bg:        #f6f8fc;
+  --surface:   #ffffff;
+  --line:      #e3e6ea;
+  --line-soft: #eef1f5;
+  --ink:       #1f1f1f;
+  --ink-soft:  #5f6368;
+  --ink-faint: #80868b;
+  --accent:    #0b57d0;
+  --accent-dk: #083e96;
+  --accent-sf: #d3e3fd;
+  --accent-bg: #e8f0fe;
+  --compose:   #c2e7ff;
+  --danger:    #b3261e;
+  --mine:      #0b57d0;
+  --theirs:    #e9eef6;
+  --r-sm:      8px;
+  --r-md:      12px;
+  --r-lg:      16px;
+  --r-pill:    999px;
+  --shadow-1:  0 1px 2px rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15);
+  --shadow-2:  0 2px 6px 2px rgba(60,64,67,.15), 0 1px 2px rgba(60,64,67,.3);
+  --shadow-3:  0 4px 8px 3px rgba(60,64,67,.15), 0 1px 3px rgba(60,64,67,.3);
+}
+
+* { box-sizing: border-box; }
+
+/*
+ * The whole app hides things with the `hidden` attribute, but that lives in
+ * the UA stylesheet, and ANY author rule setting `display` beats it -- so
+ * `.gate { display: grid }` would keep a hidden gate on screen. Restate it
+ * here, in the author sheet, where it wins.
+ */
+[hidden] { display: none !important; }
+
+html, body { height: 100%; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.5 "Google Sans", "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+button { font: inherit; cursor: pointer; }
+input, textarea { font: inherit; color: inherit; }
+
+/* Every icon in the app is a stroked 24x24 svg. */
+svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* --------------------------------------------------------------- booting  */
+
+/*
+ * The first thing painted, and the last line of defence: if app.js never
+ * runs, this is what the visitor reads instead of a white page.
+ */
+.boot {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+.boot-dot {
+  width: 30px;
+  height: 30px;
+  margin: 0 auto 14px;
+  border: 3px solid var(--accent-sf);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: boot-spin .8s linear infinite;
+}
+@keyframes boot-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-dot { animation-duration: 2.4s; }
+}
+
+.boot-error {
+  max-width: 460px;
+  padding: 28px 30px;
+  background: var(--surface);
+  border-radius: 20px;
+  box-shadow: var(--shadow-1);
+  text-align: left;
+}
+.boot-error h1 { margin: 0 0 10px; font-size: 19px; font-weight: 500; color: var(--ink); }
+.boot-error p { margin: 0 0 8px; font-size: 14px; }
+.boot-detail { color: var(--ink-faint); font-size: 12.5px; overflow-wrap: anywhere; }
+.boot-error ul { margin: 6px 0 0; padding-left: 20px; }
+.boot-error li { margin-bottom: 6px; }
+.boot-help { font-size: 12.5px; color: var(--ink-faint); }
+.boot-error code {
+  background: #f1f3f4;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+}
+
+/* ------------------------------------------------------------ type + bits */
+
+.brand {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 400;
+  letter-spacing: -.5px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.brand span { color: var(--accent); font-weight: 500; }
+.brand.small { font-size: 20px; }
+
+.hint, .note, .field-note {
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  margin: 0;
+}
+.note, .field-note { color: var(--ink-faint); }
+
+.error {
+  color: var(--danger);
+  background: #fce8e6;
+  border-radius: var(--r-sm);
+  padding: 8px 11px;
+  margin: 0;
+  font-size: 13px;
+}
+.error.small { font-size: 12.5px; padding: 7px 10px; }
+
+/* --------------------------------------------------------------- controls */
+
+.primary {
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: var(--r-pill);
+  padding: 10px 24px;
+  font-weight: 500;
+  transition: background .15s, box-shadow .15s;
+}
+.primary:hover:not(:disabled) { background: var(--accent-dk); box-shadow: var(--shadow-1); }
+.primary:disabled { background: #e8eaed; color: #9aa0a6; cursor: default; }
+.primary.small { padding: 8px 18px; font-size: 13px; }
+
+.ghost {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  padding: 8px 16px;
+  font-weight: 500;
+  transition: background .15s, border-color .15s;
+}
+.ghost:hover { background: var(--accent-bg); border-color: transparent; }
+.ghost.small { padding: 6px 14px; font-size: 12.5px; }
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: var(--ink-soft);
+  transition: background .15s, color .15s;
+}
+.icon-btn:hover { background: rgba(60,64,67,.09); color: var(--ink); }
+.icon-btn.tiny { width: 28px; height: 28px; }
+.icon-btn.tiny svg { width: 16px; height: 16px; }
+.icon-btn.danger:hover { background: #fce8e6; color: var(--danger); }
+
+input[type=text], input[type=password], input[type=search], textarea {
+  width: 100%;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+input:focus, textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-bg);
+}
+
+label { display: block; font-size: 12.5px; color: var(--ink-soft); font-weight: 500; }
+label input { margin-top: 5px; font-weight: 400; color: var(--ink); }
+
+.stack { display: flex; flex-direction: column; gap: 10px; }
+.stack button { align-self: flex-start; }
+
+/* ---------------------------------------------------------------- avatars */
+
+/*
+ * A coloured initial. The colour comes from a hash of the username in JS, so
+ * the same person is always the same colour and the list is scannable without
+ * reading it.
+ */
+.avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 500;
+  text-transform: uppercase;
+  user-select: none;
+}
+.avatar.big { width: 42px; height: 42px; font-size: 17px; }
+.avatar.small { width: 26px; height: 26px; font-size: 11px; }
+.avatar.me { width: 32px; height: 32px; font-size: 13px; cursor: pointer; }
+.avatar.me:hover { box-shadow: 0 0 0 3px rgba(60,64,67,.12); }
+
+/* A group gets two overlapping discs instead of one. */
+.avatar-stack { position: relative; width: 38px; height: 38px; flex: none; }
+.avatar-stack .avatar { position: absolute; width: 26px; height: 26px; font-size: 11px; }
+.avatar-stack .avatar:nth-child(1) { top: 0; left: 0; }
+.avatar-stack .avatar:nth-child(2) { bottom: 0; right: 0; box-shadow: 0 0 0 2px var(--surface); }
+
+/* ============================== sign in screen ========================== */
+
+.gate {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.gate-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--surface);
+  border-radius: 28px;
+  box-shadow: var(--shadow-1);
+  padding: 36px 34px 30px;
+}
+
+.gate-sub { color: var(--ink-soft); margin: 8px 0 24px; font-size: 14px; }
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  background: #f1f3f4;
+  border-radius: var(--r-pill);
+  padding: 4px;
+  margin-bottom: 22px;
+}
+.tab {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  border-radius: var(--r-pill);
+  padding: 9px 0;
+  font-weight: 500;
+  transition: background .15s, color .15s;
+}
+.tab.is-on { background: #fff; color: var(--accent); box-shadow: var(--shadow-1); }
+
+#gate-form { display: flex; flex-direction: column; gap: 16px; }
+#gate-form .primary { margin-top: 4px; align-self: stretch; }
+
+/* ================================== shell =============================== */
+
+.app { height: 100%; display: flex; flex-direction: column; }
+
+.topbar {
+  flex: none;
+  height: 62px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  background: var(--bg);
+}
+.topbar-right { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+
+#menu { display: none; }
+
+/* --------------------------------------------------------------- search   */
+
+.search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  max-width: 660px;
+  margin-left: 12px;
+}
+.search input {
+  height: 46px;
+  padding: 0 44px;
+  background: #eaf1fb;
+  border: 1px solid transparent;
+  border-radius: var(--r-lg);
+  font-size: 15px;
+  transition: background .15s, box-shadow .15s;
+}
+.search input::-webkit-search-cancel-button { display: none; }
+.search input:focus {
+  background: #fff;
+  border-color: transparent;
+  box-shadow: var(--shadow-2);
+}
+.search-icon {
+  position: absolute;
+  left: 14px;
+  color: var(--ink-soft);
+  pointer-events: none;
+}
+#search-clear { position: absolute; right: 9px; }
+
+.code-chip {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border: 0;
+  border-radius: var(--r-pill);
+  padding: 8px 15px;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: .6px;
+  transition: background .15s;
+}
+.code-chip:hover { background: var(--accent-sf); }
+.code-chip.copied { background: #e6f4ea; color: #137333; }
+
+/* ---------------------------------------------------------------- panes   */
+
+.shell { flex: 1; display: flex; min-height: 0; gap: 0; }
+
+/* left rail ---------------------------------------------------------------*/
+
+.rail {
+  flex: none;
+  width: 236px;
+  padding: 0 10px 10px 6px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.compose {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  align-self: flex-start;
+  margin: 0 0 16px 6px;
+  padding: 16px 24px 16px 18px;
+  background: var(--compose);
+  color: #001d35;
+  border: 0;
+  border-radius: var(--r-lg);
+  font-size: 14px;
+  font-weight: 500;
+  transition: box-shadow .15s, background .15s;
+}
+.compose:hover { box-shadow: var(--shadow-2); background: #b3e0fc; }
+
+.nav { list-style: none; margin: 0; padding: 0; }
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 0 14px 0 20px;
+  height: 34px;
+  background: transparent;
+  border: 0;
+  border-radius: 0 var(--r-pill) var(--r-pill) 0;
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: left;
+  transition: background .15s;
+}
+.nav-item:hover { background: #eaecef; }
+.nav-item.is-on { background: var(--accent-sf); color: #041e49; }
+.nav-item svg { width: 18px; height: 18px; flex: none; }
+.nav-item span:nth-of-type(1) { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-count { font-size: 12px; font-weight: 600; color: var(--ink-soft); }
+.nav-item.is-on .nav-count { color: #041e49; }
+
+/* Pushed to the bottom of the rail, so logging out never needs a scroll. */
+.nav-foot { margin-top: auto; padding-top: 10px; }
+
+.rail-foot {
+  margin: 10px 0 4px 20px;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  line-height: 1.8;
+}
+.rail-foot code {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: .6px;
+  cursor: pointer;
+}
+.rail-foot code:hover { text-decoration: underline; }
+
+/* conversation list -------------------------------------------------------*/
+
+.list-pane {
+  flex: none;
+  width: 364px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface);
+  border-radius: var(--r-lg) 0 0 0;
+  overflow: hidden;
+}
+
+.conv-list { flex: 1; overflow-y: auto; min-height: 0; }
+
+.conv {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  text-align: left;
+  transition: background .12s, box-shadow .12s;
+}
+.conv:hover { background: #f5f7fa; box-shadow: inset 0 0 0 1px var(--line-soft); }
+.conv.is-on { background: var(--accent-bg); }
+.conv.unread .conv-name { font-weight: 700; color: #000; }
+.conv.unread .conv-last { color: var(--ink); font-weight: 500; }
+.conv.unread .conv-time { color: var(--ink); font-weight: 600; }
+
+.conv-text { flex: 1; min-width: 0; }
+.conv-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.conv-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.conv-time { flex: none; font-size: 11.5px; color: var(--ink-faint); }
+.conv-last {
+  margin: 1px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: var(--r-pill);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.tag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  background: #e8eaed;
+  color: var(--ink-soft);
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+
+.list-empty {
+  padding: 36px 24px;
+  text-align: center;
+  color: var(--ink-faint);
+  font-size: 13px;
+}
+
+/* reading pane ------------------------------------------------------------*/
+
+.read-pane {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  background: var(--surface);
+  border-left: 1px solid var(--line-soft);
+  border-radius: 0 var(--r-lg) 0 0;
+}
+
+.empty {
+  flex: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  text-align: center;
+  color: var(--ink-faint);
+  padding: 30px;
+}
+.empty-art { width: 64px; height: 64px; color: #dadce0; stroke-width: 1.2; margin-bottom: 14px; }
+.empty-big { font-size: 17px; color: var(--ink-soft); margin: 0 0 6px; font-weight: 500; }
+.empty p { margin: 0; max-width: 320px; }
+
+.thread { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+
+.thread-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.thread-who { min-width: 0; flex: 1; }
+.thread-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.thread-sub {
+  margin: 1px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.thread-actions { display: flex; gap: 2px; flex: none; }
+.back { display: none; }
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 18px 20px 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.msg { max-width: min(600px, 72%); display: flex; flex-direction: column; margin-top: 2px; }
+.msg.mine   { align-self: flex-end;   align-items: flex-end; }
+.msg.theirs { align-self: flex-start; align-items: flex-start; }
+.msg.starts { margin-top: 12px; }
+
+.msg-from { font-size: 11.5px; font-weight: 500; color: var(--ink-faint); margin: 0 6px 3px; }
+
+.bubble {
+  padding: 9px 14px;
+  border-radius: 18px;
+  font-size: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.mine   .bubble { background: var(--mine);   color: #fff; border-bottom-right-radius: 5px; }
+.theirs .bubble { background: var(--theirs); color: var(--ink); border-bottom-left-radius: 5px; }
+
+.msg-time { font-size: 10.5px; color: var(--ink-faint); margin: 3px 6px 0; }
+
+.sysmsg {
+  align-self: center;
+  margin: 12px 0;
+  padding: 4px 13px;
+  background: #f1f3f4;
+  border-radius: var(--r-pill);
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+
+.daymark {
+  align-self: center;
+  margin: 16px 0 6px;
+  padding: 3px 12px;
+  background: #f1f3f4;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.composer {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 8px 16px 16px;
+  padding: 6px 6px 6px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 26px;
+  transition: box-shadow .15s, border-color .15s;
+}
+.composer:focus-within { box-shadow: var(--shadow-1); border-color: transparent; }
+.composer textarea {
+  border: 0;
+  padding: 10px 0;
+  resize: none;
+  max-height: 140px;
+  overflow-y: auto;
+  background: transparent;
+}
+.composer textarea:focus { box-shadow: none; }
+
+.send-btn {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  padding: 0;
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: 50%;
+  transition: background .15s, transform .1s;
+}
+.send-btn:hover { background: var(--accent-dk); }
+.send-btn:active { transform: scale(.94); }
+
+#send-error { margin: 0 20px 14px; }
+
+/* ================================= modals =============================== */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(32,33,36,.55);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 20;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 520px;
+  max-height: 88vh;
+  background: var(--surface);
+  border-radius: 28px;
+  box-shadow: var(--shadow-3);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal-card.compose-card { max-width: 560px; }
+
+.modal-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 16px 14px 24px;
+}
+.modal-head h2 { margin: 0; font-size: 17px; font-weight: 500; }
+
+.modal-body { overflow-y: auto; padding: 0 24px 24px; }
+
+/* compose -----------------------------------------------------------------*/
+
+.compose-body { display: flex; flex-direction: column; gap: 12px; }
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field-label { font-size: 12.5px; color: var(--ink-soft); font-weight: 500; }
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 7px 10px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  transition: border-color .15s, box-shadow .15s;
+}
+.chips:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
+.chips input {
+  flex: 1;
+  min-width: 150px;
+  border: 0;
+  padding: 2px 0;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.chips input:focus { box-shadow: none; }
+.chips input::placeholder { font-family: inherit; text-transform: none; letter-spacing: 0; }
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 4px;
+  background: #e8eaed;
+  border-radius: var(--r-pill);
+  font-size: 13px;
+}
+.chip .avatar { width: 22px; height: 22px; font-size: 10px; }
+.chip span { padding: 0 2px; }
+.chip button {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: var(--ink-soft);
+}
+.chip button:hover { background: rgba(60,64,67,.14); color: var(--ink); }
+.chip button svg { width: 13px; height: 13px; stroke-width: 2.2; }
+
+.compose-text {
+  min-height: 120px;
+  resize: vertical;
+  border-radius: var(--r-sm);
+}
+
+.compose-foot { display: flex; align-items: center; gap: 14px; margin-top: 2px; }
+
+/* settings ----------------------------------------------------------------*/
+
+.setting { padding: 18px 0; border-bottom: 1px solid var(--line-soft); }
+.setting:last-of-type { border-bottom: 0; }
+.setting h3 { margin: 0 0 4px; font-size: 14px; font-weight: 500; }
+.setting .note { margin-bottom: 8px; }
+
+.code-row { display: flex; align-items: center; gap: 10px; margin: 10px 0 7px; }
+.code-row code {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-radius: var(--r-sm);
+  padding: 9px 15px;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0 9px;
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--ink);
+  cursor: pointer;
+}
+.check input { width: 17px; height: 17px; accent-color: var(--accent); margin: 0; cursor: pointer; }
+
+.block-list { list-style: none; margin: 0; padding: 0; }
+.block-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.block-list li:last-child { border-bottom: 0; }
+.block-list li span { flex: 1; font-size: 13.5px; }
+.block-list .none { color: var(--ink-faint); font-size: 12.5px; padding: 4px 0; border: 0; }
+
+.settings-msg {
+  margin: 16px 0 0;
+  padding: 10px 13px;
+  background: #e6f4ea;
+  border-radius: var(--r-sm);
+  color: #137333;
+  font-size: 12.5px;
+}
+.settings-msg.bad { background: #fce8e6; color: var(--danger); }
+
+/* ============================== question bot ============================ */
+
+/*
+ * The bot is yellow everywhere it appears, so it never reads as a person.
+ *
+ * Yellow is the hard colour to do that in: a true yellow on white sits around
+ * 1.3:1 and is genuinely unreadable as text. So "yellow" here is a pair --
+ * --bot-bright for filled shapes, where the colour is doing the talking, and
+ * the deeper --bot for actual letters, where it still reads as gold but can
+ * be read. Small text takes the deep tone; only the thread title, at 16px,
+ * is large enough for the mid one.
+ */
+:root {
+  --bot:        #8a6300;  /* letters, small */
+  --bot-mid:    #a87800;  /* letters, large */
+  --bot-bright: #f5b800;  /* discs, badges, dots */
+  --bot-soft:   #fff8e1;  /* tints */
+  --bot-line:   #f6e0a0;
+}
+
+.bot-avatar {
+  background: var(--bot-bright);
+  color: #4a3500;
+  font-weight: 700;
+}
+
+/* The rail entry -- how most people will find the bot at all. */
+.bot-item { color: var(--bot); }
+.bot-item:hover { background: var(--bot-soft); }
+.bot-item svg { color: var(--bot-mid); }
+
+.bot-tag { background: var(--bot-bright); color: #4a3500; }
+
+.conv.is-bot .conv-name { color: var(--bot); font-weight: 600; }
+.conv.is-bot.is-on { background: var(--bot-soft); }
+
+#thread-title.bot-title { color: var(--bot-mid); }
+
+/* The label over every reply. Deliberately always drawn, never folded away. */
+.bot-from { color: var(--bot); font-weight: 600; }
+
+.msg.from-bot .bubble {
+  background: var(--bot-soft);
+  border: 1px solid var(--bot-line);
+  /* The border would otherwise push the text a pixel off a plain bubble's. */
+  padding: 8px 13px;
+}
+
+/* ----------------------------------------------------- waiting for a reply */
+
+.typing-bubble {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 13px 14px;
+}
+.typing-bubble .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--bot-mid);
+  animation: bot-think 1.2s ease-in-out infinite;
+}
+.typing-bubble .dot:nth-child(2) { animation-delay: .15s; }
+.typing-bubble .dot:nth-child(3) { animation-delay: .3s; }
+
+@keyframes bot-think {
+  0%, 60%, 100% { opacity: .3; transform: translateY(0); }
+  30%           { opacity: 1;  transform: translateY(-3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .typing-bubble .dot { animation: none; opacity: .55; }
+}
+
+/* ================================ pictures ============================== */
+
+.attach-btn { flex: none; margin-bottom: 2px; }
+.attach-btn:disabled { opacity: .4; cursor: default; }
+
+/* Between picking a picture and sending it: proof the right file is attached. */
+.attach-preview {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 16px 6px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.attach-preview img {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  object-fit: cover;
+  border-radius: var(--r-sm);
+  background: var(--line-soft);
+}
+.attach-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.attach-meta strong {
+  font-size: 12.5px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attach-meta span { font-size: 11.5px; color: var(--ink-faint); }
+
+/* A picture is the whole bubble, so it loses the bubble's padding. */
+.bubble-image {
+  padding: 0;
+  overflow: hidden;
+  line-height: 0;
+}
+.msg-image {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  /* Tall pictures are capped so one photo cannot fill the whole thread. */
+  max-height: 340px;
+  cursor: zoom-in;
+}
+.image-caption {
+  padding: 7px 13px 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.image-gone {
+  padding: 10px 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+/* ---------------------------------------------------------- picture viewer */
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(32, 33, 36, .88);
+}
+.lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-3);
+}
+#close-lightbox {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  color: #fff;
+}
+#close-lightbox:hover { background: rgba(255, 255, 255, .16); }
+
+/* ============================== narrow screens ========================== */
+
+@media (max-width: 1100px) {
+  .rail { width: 76px; }
+  .rail .compose { padding: 16px; margin-left: 2px; }
+  .rail .compose span { display: none; }
+  .nav-item { padding: 0 0 0 16px; }
+  .nav-item span { display: none; }
+  .rail-foot { display: none; }
+  .list-pane { width: 320px; }
+}
+
+@media (max-width: 900px) {
+  .topbar { height: 56px; padding: 0 8px; gap: 6px; }
+  .brand.small { display: none; }
+  #menu { display: grid; }
+  .search { margin-left: 0; }
+  .search input { height: 40px; font-size: 14px; }
+  .code-chip { display: none; }
+
+  .rail {
+    position: fixed;
+    top: 56px;
+    bottom: 0;
+    left: 0;
+    z-index: 15;
+    width: 230px;
+    padding-top: 10px;
+    background: var(--bg);
+    box-shadow: var(--shadow-3);
+    transform: translateX(-104%);
+    transition: transform .2s ease;
+  }
+  .rail.open { transform: none; }
+  .rail .compose { padding: 16px 24px 16px 18px; }
+  .rail .compose span,
+  .nav-item span { display: inline; }
+  .nav-item { padding: 0 14px 0 20px; }
+
+  .list-pane { width: 100%; border-radius: var(--r-lg) var(--r-lg) 0 0; }
+  .read-pane { border-radius: var(--r-lg) var(--r-lg) 0 0; }
+  .shell.has-thread .list-pane { display: none; }
+  .shell:not(.has-thread) .read-pane { display: none; }
+
+  .back { display: grid; }
+  .thread-sub { display: none; }
+  .msg { max-width: 84%; }
+  .messages { padding: 14px 12px 4px; }
+  .composer { margin: 6px 10px 12px; }
+
+  .modal { padding: 0; place-items: stretch; }
+  .modal-card { max-width: none; max-height: none; height: 100%; border-radius: 0; }
+
+  .attach-preview { margin: 0 10px 6px; }
+  /* Less room to spare, so a photo gives up more of it. */
+  .msg-image { max-height: 260px; }
+  .lightbox { padding: 10px; }
+}

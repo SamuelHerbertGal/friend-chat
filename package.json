@@ -1,0 +1,17 @@
+{
+  "name": "friend-chat",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A small texting site: accounts, friend codes, group chats, blocking, pictures and a Question Bot.",
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-sqlite server.mjs",
+    "test": "node --experimental-sqlite test.mjs"
+  },
+  "engines": {
+    "node": ">=22.5"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0"
+  }
+}
