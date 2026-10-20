@@ -11,6 +11,19 @@
 
 const POLL_MS = 1500;
 
+/**
+ * Normally this page and its API live on the same origin, so a relative path
+ * like `/api/messages` is enough and nothing here needs to know where the
+ * server actually is. The one exception is the GitHub Pages preview: that
+ * page is served from github.io, which has no server behind it at all, so a
+ * relative /api/ call hits nothing. On that one origin, point requests at the
+ * real backend instead; everywhere else, stay relative, exactly as before.
+ * See server.mjs's ALLOWED_ORIGIN comment for the other half of this.
+ */
+const API_BASE = location.hostname.endsWith('.github.io')
+  ? 'https://friend-chat.onrender.com'
+  : '';
+
 // Tell the boot guard in index.html that this file ran. It must be set here,
 // at the top of module evaluation, not after the first request: the flag means
 // "app.js executed", and a slow server must not look like a failed one.
@@ -59,8 +72,12 @@ const state = {
 /* -------------------------------------------------------------------- api */
 
 async function api(path, { method = 'GET', body } = {}) {
-  const res = await fetch(path, {
+  const res = await fetch(API_BASE + path, {
     method,
+    // A plain same-origin fetch sends the session cookie on its own; a
+    // cross-origin one (API_BASE set) does not unless told to. This is a
+    // no-op in the same-origin case, so it is always safe to include.
+    credentials: 'include',
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -771,7 +788,10 @@ function imageBubble(msg) {
   const wrap = el('div', 'bubble bubble-image');
 
   const img = el('img', 'msg-image');
-  img.src = `/api/image?message=${msg.id}`;
+  // An <img> tag carries cookies cross-origin on its own once SameSite=None
+  // is set server-side (see server.mjs), so this needs no credentials flag
+  // the way the fetch() calls in api() do -- just the right URL.
+  img.src = `${API_BASE}/api/image?message=${msg.id}`;
   img.alt = msg.body || 'Picture';
   img.loading = 'lazy';
   if (msg.image.width && msg.image.height) {

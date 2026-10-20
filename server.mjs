@@ -8,6 +8,14 @@
  * needs to reach api.anthropic.com -- see bot.mjs.
  *
  *   node --experimental-sqlite server.mjs
+ *
+ * Normally the browser loads public/ from this same server, so every request
+ * is same-origin and none of this needs to think about where it came from.
+ * ALLOWED_ORIGIN exists for the one case that is not that: the GitHub Pages
+ * preview, which serves public/ on its own domain and calls this server's API
+ * across origins. Setting it turns on CORS headers and switches the session
+ * cookie to SameSite=None; Secure, which is what a cross-site cookie requires
+ * -- see sessionCookie() below. Leave it unset for every other deployment.
  */
 
 import { createServer } from 'node:http';
@@ -19,6 +27,9 @@ import * as Bot from './bot.mjs';
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC = join(fileURLToPath(new URL('.', import.meta.url)), 'public');
+
+/** See the file-header comment: unset by default, meaning same-origin only. */
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || null;
 
 /** Pictures arrive base64'd inside JSON, so this route needs a bigger body. */
 const BODY_LIMITS = { 'POST /api/upload': 8 * 1024 * 1024 };
@@ -81,8 +92,18 @@ const parseCookies = (header = '') =>
       .map(([k, ...v]) => [k, decodeURIComponent(v.join('='))])
   );
 
-const sessionCookie = (token, maxAgeSeconds) =>
-  `sid=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSeconds}`;
+/**
+ * SameSite=Lax is the right default: it is same-origin, so the browser sends
+ * the cookie with no help needed. A cookie read across origins needs
+ * SameSite=None, and the browser refuses SameSite=None without Secure too --
+ * so turning on cross-origin mode means this now requires HTTPS. Render
+ * terminates TLS for us; this would break a plain http://localhost run, which
+ * is exactly why it only changes when ALLOWED_ORIGIN is actually set.
+ */
+const sessionCookie = (token, maxAgeSeconds) => {
+  const policy = ALLOWED_ORIGIN ? 'SameSite=None; Secure' : 'SameSite=Lax';
+  return `sid=${token}; HttpOnly; ${policy}; Path=/; Max-Age=${maxAgeSeconds}`;
+};
 
 const str = (value, max = 500) => String(value ?? '').trim().slice(0, max);
 
@@ -597,7 +618,39 @@ const me = (user) => ({
 
 /* ------------------------------------------------------------------ server */
 
+/**
+ * Cross-origin headers for the one browser allowed to call this API from a
+ * different origin -- see the file-header comment. `Access-Control-Allow-
+ * Origin` is echoed back rather than set to the page's own origin directly,
+ * which is just how a credentialed CORS response has to be built: the
+ * wildcard `*` is rejected by browsers the moment cookies are involved.
+ * Anything whose Origin header does not match ALLOWED_ORIGIN gets none of
+ * this and falls back to the ordinary same-origin rules.
+ */
+function allowCrossOrigin(req, res) {
+  if (!ALLOWED_ORIGIN || req.headers.origin !== ALLOWED_ORIGIN) return false;
+  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Vary', 'Origin');
+  return true;
+}
+
 const server = createServer(async (req, res) => {
+  const crossOrigin = allowCrossOrigin(req, res);
+
+  // The browser asks permission with OPTIONS before a POST it considers
+  // risky -- any JSON body counts. There is nothing to run for this request;
+  // the headers above already answered it, so just say which methods and
+  // headers the real request may use and stop.
+  if (req.method === 'OPTIONS') {
+    if (crossOrigin) {
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    }
+    res.writeHead(204);
+    return res.end();
+  }
+
   const url = new URL(req.url, 'http://localhost');
   const pathname = url.pathname;
 

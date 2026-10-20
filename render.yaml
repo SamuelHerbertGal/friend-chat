@@ -19,3 +19,9 @@ services:
       # (and says so) until it is set.
       - key: ANTHROPIC_API_KEY
         sync: false
+      # Lets the GitHub Pages preview (a different origin) call this server's
+      # API and still get a working login. Not a secret -- a GitHub Pages URL
+      # is public by definition -- so it is fine to commit, unlike the key
+      # above. See the ALLOWED_ORIGIN comment at the top of server.mjs.
+      - key: ALLOWED_ORIGIN
+        value: https://samuelherbertgal.github.io

@@ -111,6 +111,30 @@ add it.
 
 ---
 
+## Making the GitHub Pages preview actually work
+
+The static preview (`.github/workflows/pages.yml`) normally just shows the
+sign-in screen with no way to use it — Pages has no server. If a Render
+backend is deployed, the preview can be pointed at it instead:
+
+- `render.yaml` sets `ALLOWED_ORIGIN` to the Pages URL already, so the Render
+  server sends the CORS headers and the cross-site cookie settings that
+  requires.
+- `public/app.js` detects it is running on `*.github.io` and sends every `/api/`
+  call to the Render URL instead of a relative one.
+
+**The Render URL is hardcoded in `app.js`** (`API_BASE`, near the top) because
+Pages serves static files with no way to inject it at build time. If the
+service ends up at a different address than `friend-chat.onrender.com` — Render
+appends a random suffix when the plain name is already taken — update that
+constant to match and redeploy Pages (any push to `main` rebuilds it).
+
+This only ever applies to the Pages preview. Every other way of running
+friendchat — locally, or visiting the Render URL directly — stays same-origin
+and none of this is in play; `ALLOWED_ORIGIN` unset is the ordinary case.
+
+---
+
 ## Switching Question Bot on
 
 The bot is the one part of friendchat that talks to the outside world. It needs
