@@ -9,9 +9,10 @@ friendchat is **two halves**:
 | front | `public/index.html`, `app.js`, `style.css` | what you see | any web host |
 | back | `server.mjs`, `db.mjs`, `bot.mjs` | accounts, messages, pictures, Question Bot | **Node** |
 
-Uploading only the `public/` folder by FTP gets you a site that **looks** right and
-cannot work. There is nothing to sign you in, nothing storing messages. You will
-reach the login screen and get *"Can't reach the server"* the moment you try to use it.
+Uploading only the `public/` folder by FTP — or to a static host like **GitHub
+Pages** — gets you a site that **looks** right and cannot work. There is nothing
+to sign you in, nothing storing messages. You will reach the login screen and get
+*"Can't reach the server"* the moment you try to use it.
 
 Your cPanel hosting (the one `greek.quest` and `talk-to-sam` are on) runs **PHP**.
 It will not run `server.mjs`. So there are only two honest routes:
@@ -94,7 +95,19 @@ redeploy:
 - `uploads/` — every picture anyone has sent. Override with `CHAT_UPLOADS`.
 
 Free tiers usually sleep when idle, which means a slow first load rather than
-an outage.
+an outage — **except the filesystem itself usually does not survive that sleep
+either**, on a free plan with no disk attached. Treat a free instance as a demo
+that forgets its accounts periodically, not a place for anyone's real history,
+until a paid plan with a disk is attached.
+
+### Render, specifically
+
+`render.yaml` in the repo root is a ready-made blueprint: on render.com, **New +
+→ Blueprint**, point it at this repo, and it fills in the build/start commands
+on its own. It deploys on the free plan with no disk — see the warning above —
+and leaves `ANTHROPIC_API_KEY` for you to set afterward in the dashboard
+(**Environment** tab), so Question Bot starts off and switches on the moment you
+add it.
 
 ---
 

@@ -1,0 +1,21 @@
+# Render blueprint for friend-chat.
+#
+# No disk is attached here -- Render's free tier does not support persistent
+# disks, so chat.db and uploads/ live on the service's ephemeral filesystem.
+# That means accounts, messages and pictures are lost whenever the service
+# restarts or redeploys (including waking from sleep on the free plan). To
+# keep data permanently, upgrade the instance type and add a Disk resource
+# in the Render dashboard, mounted wherever CHAT_DB/CHAT_UPLOADS point.
+services:
+  - type: web
+    name: friend-chat
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node --experimental-sqlite server.mjs
+    envVars:
+      # Set this in the Render dashboard after the first deploy -- sync:false
+      # keeps it out of this file and out of git. Question Bot stays off
+      # (and says so) until it is set.
+      - key: ANTHROPIC_API_KEY
+        sync: false
